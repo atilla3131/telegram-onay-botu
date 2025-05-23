@@ -1,0 +1,115 @@
+import os
+from telegram import Update, ChatJoinRequest, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, ContextTypes,
+    ChatJoinRequestHandler, MessageHandler, filters, CallbackQueryHandler
+)
+
+ADMIN_IDS = [8095529296]  # Senin Telegram kullanıcı ID'in
+pending_requests = []
+kanal_listesi = []
+aktif_kanal_id = None
+welcome_message = "Hoş geldin! Sipariş vermek için DM'den ulaşabilirsin."
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Bot aktif. Komut bekleniyor...")
+
+async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    req = update.chat_join_request
+    if aktif_kanal_id is None:
+        return
+    if str(req.chat.id) == str(aktif_kanal_id) or (req.chat.username and ("@" + req.chat.username) == aktif_kanal_id):
+        pending_requests.append(req)
+
+async def onayla(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return await update.message.reply_text("⛔ Yetkin yok.")
+    count = 0
+    for req in pending_requests[:]:
+        try:
+            await context.bot.approve_chat_join_request(chat_id=req.chat.id, user_id=req.from_user.id)
+            await context.bot.send_message(chat_id=req.from_user.id, text=welcome_message)
+            pending_requests.remove(req)
+            count += 1
+        except Exception as e:
+            print(e)
+    await update.message.reply_text(f"✅ {count} istek onaylandı ve mesaj gönderildi.")
+
+async def onayla_sayi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return await update.message.reply_text("⛔ Yetkin yok.")
+    try:
+        count = int(context.args[0])
+    except:
+        return await update.message.reply_text("❌ Kullanım: /onayla_sayi 10")
+    approved = 0
+    for req in pending_requests[:count]:
+        try:
+            await context.bot.approve_chat_join_request(chat_id=req.chat.id, user_id=req.from_user.id)
+            await context.bot.send_message(chat_id=req.from_user.id, text=welcome_message)
+            pending_requests.remove(req)
+            approved += 1
+        except Exception as e:
+            print(e)
+    await update.message.reply_text(f"✅ {approved} istek onaylandı ve mesaj gönderildi.")
+
+async def mesaj(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global welcome_message
+    if update.effective_user.id not in ADMIN_IDS:
+        return await update.message.reply_text("⛔ Yetkin yok.")
+    welcome_message = " ".join(context.args)
+    await update.message.reply_text(f"✅ Yeni mesaj ayarlandı:\n\n{welcome_message}")
+
+async def ekle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return await update.message.reply_text("⛔ Yetkin yok.")
+    await update.message.reply_text("📌 Eklemek istediğin kanalın kullanıcı adını (@grupadı) ya da ID’sini yaz.")
+
+async def kanal_ayarla(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global aktif_kanal_id, kanal_listesi
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    kanal = update.message.text.strip()
+    if kanal not in kanal_listesi:
+        kanal_listesi.append(kanal)
+        aktif_kanal_id = kanal
+        await update.message.reply_text(f"✅ Kanal eklendi ve aktif yapıldı: {kanal}")
+    else:
+        await update.message.reply_text("⚠️ Bu kanal zaten kayıtlı.")
+
+async def kanallar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    if not kanal_listesi:
+        return await update.message.reply_text("📭 Henüz kanal eklenmedi.")
+    buttons = []
+    for kanal in kanal_listesi:
+        text = f"✅ {kanal}" if kanal == aktif_kanal_id else kanal
+        buttons.append([InlineKeyboardButton(text, callback_data=f"sec_{kanal}")])
+    await update.message.reply_text("🔽 Kayıtlı Kanallar:", reply_markup=InlineKeyboardMarkup(buttons))
+
+async def sec_callback(update: Update, context: ContextTypes.
+
+DEFAULT_TYPE):
+    global aktif_kanal_id
+    query = update.callback_query
+    await query.answer()
+    kanal = query.data.replace("sec_", "")
+    aktif_kanal_id = kanal
+    await query.edit_message_text(f"✅ Aktif kanal güncellendi: {kanal}")
+
+if name == "__main__":
+    app = ApplicationBuilder().token("8136492712:AAE9MdGoGnFG23jDjSaAfkGXctG4GWMutBc").build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("onayla", onayla))
+    app.add_handler(CommandHandler("onayla_sayi", onayla_sayi))
+    app.add_handler(CommandHandler("mesaj", mesaj))
+    app.add_handler(CommandHandler("ekle", ekle))
+    app.add_handler(CommandHandler("kanallar", kanallar))
+    app.add_handler(CallbackQueryHandler(sec_callback))
+    app.add_handler(ChatJoinRequestHandler(handle_join_request))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), kanal_ayarla))
+
+    print("🤖 Bot çalışıyor...")
+    app.run_polling()
