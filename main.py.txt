@@ -1,0 +1,41 @@
+global aktif_kanal_id
+    query = update.callback_query
+    await query.answer()
+    kanal_id = query.data.replace("sec_", "")
+    if kanal_id in kanal_listesi:
+        aktif_kanal_id = kanal_id
+        await query.edit_message_text(f"✅ Aktif kanal değiştirildi: {aktif_kanal_id}")
+
+async def sil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return await update.message.reply_text("⛔ Yetkin yok.")
+    await update.message.reply_text("❌ Silmek istediğin kanalın kullanıcı adını (@grupadı) ya da ID’sini yaz.")
+
+async def kanal_sil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global kanal_listesi, aktif_kanal_id
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    kanal = update.message.text.strip()
+    if kanal in kanal_listesi:
+        kanal_listesi.remove(kanal)
+        if aktif_kanal_id == kanal:
+            aktif_kanal_id = kanal_listesi[0] if kanal_listesi else None
+        await update.message.reply_text(f"❌ Kanal silindi: {kanal}")
+    else:
+        await update.message.reply_text("❗ Bu kanal listede yok.")
+
+app = ApplicationBuilder().token(os.getenv("YOUR_BOT_TOKEN_HERE")).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("onayla", onayla))
+app.add_handler(CommandHandler("onayla_sayi", onayla_sayi))
+app.add_handler(CommandHandler("mesaj", mesaj))
+app.add_handler(CommandHandler("ekle", ekle))
+app.add_handler(CommandHandler("kanallar", kanallar))
+app.add_handler(CommandHandler("sil", sil))
+app.add_handler(CallbackQueryHandler(sec_callback))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, kanal_ayarla))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, kanal_sil))
+app.add_handler(ChatJoinRequestHandler(handle_join_request))
+
+app.run_polling()
